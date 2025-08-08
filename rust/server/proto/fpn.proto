@@ -1,0 +1,28 @@
+syntax = "proto3";
+package fpn;
+
+message Intent {
+  string id = 1;
+  double profit = 2;
+  repeated string resources = 3;
+  string client_id = 4;
+}
+
+message AuctionOrder {
+  uint64 id = 1;
+  double bid = 2;
+  uint32 priority = 3;
+  string client_id = 4;
+  int64 submitted_at_ms = 5;
+}
+
+message EventField {
+  string key = 1;
+  string value = 2;
+}
+
+message Event {
+  string type = 1;
+  string trace_id = 2;
+  repeated EventField fields = 3;
+}

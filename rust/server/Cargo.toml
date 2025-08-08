@@ -22,6 +22,8 @@ rand = "0.8"
 console-subscriber = "0.2"
 reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"] }
 anyhow = "1"
+# Protobuf runtime for generated types (ABCI adapter scaffolding)
+prost = "0.12"
 # Optional ZK backend (arkworks Groth16/BN254)
 ark-bn254 = { version = "0.4", optional = true }
 ark-groth16 = { version = "0.4", optional = true }
@@ -70,3 +72,7 @@ zk = [
     "ark-serialize",
     "ark-snark",
 ]
+
+[build-dependencies]
+# Protobuf codegen
+prost-build = "0.12"
