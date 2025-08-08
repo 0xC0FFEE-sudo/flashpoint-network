@@ -6,7 +6,7 @@ UVICORN := $(VENV)/bin/uvicorn
 PYTEST := $(VENV)/bin/pytest
 PIP := $(VENV)/bin/pip
 
-.PHONY: help venv install run test clean engine-help engine-install engine-build engine-clean server-help server-build server-run server-test server-clean ws-lag-demo
+.PHONY: help venv install run test clean engine-help engine-install engine-build engine-clean server-help server-build server-run server-test server-clean server-clean-data ws-lag-demo
 
 help:
 	@echo "Targets:"
@@ -80,6 +80,7 @@ server-help:
 	@echo "  make server-load-insert   # run async loader (insert mode); requires server running"
 	@echo "  make server-load-build    # run async loader (build mode); requires server running"
 	@echo "  make server-clean    # remove server target artifacts"
+	@echo "  make server-clean-data # remove sled data dirs under rust/server/data/fpn_*"
 	@echo "  make abci-shim-build # build ABCI shim binary"
 	@echo "  make abci-shim-run   # run ABCI shim (FPN_BASE, FPN_ABCI_PORT configurable)"
 	@echo "  make abci-shim-test  # run ABCI shim integration test"
@@ -121,6 +122,9 @@ server-run-otel:
 
 server-clean:
 	rm -rf rust/server/target
+
+server-clean-data:
+	rm -rf rust/server/data/fpn rust/server/data/fpn_*
 
 server-build-release:
 	$(CARGO) build --manifest-path $(SERVER_MANIFEST) --release

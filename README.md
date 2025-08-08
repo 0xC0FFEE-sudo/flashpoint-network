@@ -44,6 +44,25 @@ make server-load-insert
 make server-load-build
 ```
 
+#### Persistence (sled)
+
+- Default DB path when `FPN_DB_PATH` is unset: `rust/server/data/fpn_<port>` where `<port>` is the server port (from `FPN_PORT`, default `8080`). This per-port default prevents cross-test DB contention and readiness races.
+- Override the path by setting `FPN_DB_PATH`:
+
+  ```bash
+  # Example: custom absolute path
+  FPN_DB_PATH=/tmp/fpn_db cargo run --manifest-path rust/server/Cargo.toml
+
+  # Example: per-run temp dir
+  FPN_DB_PATH=$(mktemp -d) cargo test --manifest-path rust/server/Cargo.toml
+  ```
+
+- Clean persisted data created by local runs/tests:
+
+  ```bash
+  make server-clean-data
+  ```
+
 - ABCI shim:
 
 ```
