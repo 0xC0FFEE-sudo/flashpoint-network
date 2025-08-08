@@ -35,6 +35,10 @@ use tower::{BoxError, ServiceBuilder};
 use tower_http::cors::{Any, CorsLayer};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+#[cfg(feature = "persist")]
+use sled;
+#[cfg(feature = "persist")]
+use std::convert::TryInto;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Intent {
@@ -44,6 +48,79 @@ struct Intent {
     client_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     arrival_index: Option<u64>,
+}
+
+// Persistence helpers (no-ops when feature disabled)
+#[cfg(feature = "persist")]
+fn be_u64(n: u64) -> [u8; 8] {
+    n.to_be_bytes()
+}
+#[cfg(feature = "persist")]
+fn from_be_u64(b: &[u8]) -> u64 {
+    let arr: [u8; 8] = b.try_into().expect("u64 key length");
+    u64::from_be_bytes(arr)
+}
+
+#[cfg(feature = "persist")]
+fn persist_put_intent(state: &ServerState, idx: u64, it: &Intent) -> Result<(), String> {
+    let key = be_u64(idx);
+    let val = serde_json::to_vec(it).map_err(|e| e.to_string())?;
+    state
+        .persist
+        .intents
+        .insert(key, val)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+#[cfg(not(feature = "persist"))]
+fn persist_put_intent(_state: &ServerState, _idx: u64, _it: &Intent) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(feature = "persist")]
+fn persist_put_bulk(state: &ServerState, start_idx: u64, items: &[Intent]) -> Result<(), String> {
+    for (i, it) in items.iter().enumerate() {
+        let idx = start_idx + i as u64;
+        persist_put_intent(state, idx, it)?;
+    }
+    Ok(())
+}
+#[cfg(not(feature = "persist"))]
+fn persist_put_bulk(_state: &ServerState, _start_idx: u64, _items: &[Intent]) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(feature = "persist")]
+fn persist_set_next_index(state: &ServerState, next: u64) -> Result<(), String> {
+    state
+        .persist
+        .meta
+        .insert(b"next_index", be_u64(next).to_vec())
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+#[cfg(not(feature = "persist"))]
+fn persist_set_next_index(_state: &ServerState, _next: u64) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(feature = "persist")]
+fn persist_reset(state: &ServerState) -> Result<(), String> {
+    state
+        .persist
+        .intents
+        .clear()
+        .map_err(|e| e.to_string())?;
+    state
+        .persist
+        .meta
+        .remove(b"next_index")
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+#[cfg(not(feature = "persist"))]
+fn persist_reset(_state: &ServerState) -> Result<(), String> {
+    Ok(())
 }
 
 // Default resource pool used by seed endpoint
@@ -64,25 +141,53 @@ const MAX_RESOURCES_PER_INTENT: usize = 64;
 // WebSocket support
 async fn ws_route(State(state): State<SharedState>, ws: WebSocketUpgrade) -> impl IntoResponse {
     let rx = state.tx.subscribe();
-    ws.on_upgrade(move |socket| handle_socket(socket, rx))
+    ws.on_upgrade(move |socket| handle_socket(socket, rx, state))
 }
 
-async fn handle_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<String>) {
+async fn handle_socket(
+    mut socket: WebSocket,
+    mut rx: broadcast::Receiver<String>,
+    state: SharedState,
+) {
     WS_CLIENTS_GAUGE.inc();
-    // Forward broadcast messages to this client; ignore client->server messages.
+    // On connect, if there is a cached last ABCI prepare event, send it once to help new subscribers
+    #[cfg(feature = "abci")]
+    if let Some(msg) = state
+        .last_abci_prepare
+        .read()
+        .await
+        .as_ref()
+        .cloned()
+    {
+        let _ = socket.send(Message::Text(msg)).await;
+    }
+    // Forward broadcast messages to this client; concurrently drain client->server messages
+    // to ensure ping/pong and keep the connection alive.
     loop {
-        match rx.recv().await {
-            Ok(msg) => {
-                if socket.send(Message::Text(msg)).await.is_err() {
-                    break;
+        tokio::select! {
+            // Broadcast from server to this client
+            biased;
+            res = rx.recv() => {
+                match res {
+                    Ok(msg) => {
+                        if socket.send(Message::Text(msg)).await.is_err() { break; }
+                    }
+                    Err(RecvError::Lagged(_)) => {
+                        WS_LAGGED_TOTAL.inc();
+                        // try to keep up
+                        continue;
+                    }
+                    Err(RecvError::Closed) => break,
                 }
             }
-            Err(RecvError::Lagged(_)) => {
-                WS_LAGGED_TOTAL.inc();
-                // continue to try to keep up
-                continue;
+            // Drain any incoming frames (including pings); ignore payloads
+            msg = socket.recv() => {
+                match msg {
+                    Some(Ok(_)) => { /* ignore client messages */ }
+                    Some(Err(_)) => break,
+                    None => break,
+                }
             }
-            Err(RecvError::Closed) => break,
         }
     }
     WS_CLIENTS_GAUGE.dec();
@@ -197,10 +302,21 @@ struct ServerConfig {
     api_key: Option<String>,
 }
 
+#[cfg(feature = "persist")]
+struct Persistence {
+    db: sled::Db,
+    intents: sled::Tree,
+    meta: sled::Tree,
+}
+
 struct ServerState {
     app: RwLock<AppState>,
     tx: broadcast::Sender<String>,
     config: ServerConfig,
+    #[cfg(feature = "persist")]
+    persist: Persistence,
+    #[cfg(feature = "abci")]
+    last_abci_prepare: RwLock<Option<String>>,
 }
 
 type SharedState = Arc<ServerState>;
@@ -367,6 +483,9 @@ async fn reset(State(state): State<SharedState>) -> Json<Value> {
     s.intents.clear();
     s.next_index = 0;
     INTENTS_GAUGE.set(0);
+    if let Err(e) = persist_reset(&state) {
+        tracing::error!(err = %e, "failed to reset persistence");
+    }
     let trace_id = tracing::Span::current()
         .context()
         .span()
@@ -425,13 +544,22 @@ async fn submit_intent(
         span.record("profit", tracing::field::display(req.profit));
     }
     let mut s = state.app.write().await;
+    let idx = s.next_index;
     let it = Intent {
         profit: req.profit,
         resources: req.resources,
         client_id: req.client_id,
-        arrival_index: Some(s.next_index),
+        arrival_index: Some(idx),
     };
-    s.next_index += 1;
+    // Persist first to ensure durability
+    if let Err(e) = persist_put_intent(&state, idx, &it).and_then(|_| persist_set_next_index(&state, idx + 1)) {
+        record_span_error("persistence error");
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"detail":"persistence error","error": e})),
+        ));
+    }
+    s.next_index = idx + 1;
     s.intents.push(it.clone());
     INTENTS_TOTAL.inc();
     INTENTS_GAUGE.set(s.intents.len() as i64);
@@ -501,6 +629,20 @@ async fn submit_intents_bulk(
         s.next_index += 1;
         s.intents.push(it.clone());
         out.push(it);
+    }
+    // Persist batch and next_index
+    let start_idx = out
+        .first()
+        .and_then(|it| it.arrival_index)
+        .unwrap_or(0);
+    if let Err(e) = persist_put_bulk(&state, start_idx, &out)
+        .and_then(|_| persist_set_next_index(&state, s.next_index))
+    {
+        record_span_error("persistence error");
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"detail":"persistence error","error": e})),
+        ));
     }
     INTENTS_TOTAL.inc_by(out.len() as u64);
     INTENTS_GAUGE.set(s.intents.len() as i64);
@@ -898,13 +1040,68 @@ async fn main() {
     let (tx, _rx) = broadcast::channel(ws_cap);
     // Set the gauge to the configured capacity
     WS_CHANNEL_CAP_GAUGE.set(ws_cap as i64);
+    // Determine listening port early so we can derive a unique default DB path per instance
+    let port: u16 = std::env::var("FPN_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8080);
+    #[cfg(feature = "persist")]
+    let persist = {
+        // If FPN_DB_PATH is not set, default to a port-scoped directory to avoid sled DB
+        // contention across concurrently spawned test servers or rapid restarts.
+        let path = std::env::var("FPN_DB_PATH").unwrap_or_else(|_| format!("data/fpn_{}", port));
+        std::fs::create_dir_all(&path).ok();
+        let db = sled::open(&path).expect("open sled db");
+        let intents = db.open_tree("intents").expect("open intents tree");
+        let meta = db.open_tree("meta").expect("open meta tree");
+        Persistence { db, intents, meta }
+    };
     let state: SharedState = Arc::new(ServerState {
         app: RwLock::new(AppState::default()),
         tx,
         config: ServerConfig {
             api_key: std::env::var("FPN_API_KEY").ok(),
         },
+        #[cfg(feature = "persist")]
+        persist,
+        #[cfg(feature = "abci")]
+        last_abci_prepare: RwLock::new(None),
     });
+
+    // Load existing intents from persistence if enabled
+    #[cfg(feature = "persist")]
+    {
+        let mut s = state.app.write().await;
+        s.intents.clear();
+        let mut last_idx: u64 = 0;
+        for res in state.persist.intents.iter() {
+            if let Ok((k, v)) = res {
+                let idx = from_be_u64(k.as_ref());
+                match serde_json::from_slice::<Intent>(v.as_ref()) {
+                    Ok(mut it) => {
+                        it.arrival_index = Some(idx);
+                        s.intents.push(it);
+                        last_idx = idx;
+                    }
+                    Err(e) => {
+                        tracing::warn!(err = %e, "failed to decode intent from persistence");
+                    }
+                }
+            }
+        }
+        // Use meta next_index if present; otherwise last_idx + 1
+        let next = state
+            .persist
+            .meta
+            .get(b"next_index")
+            .ok()
+            .flatten()
+            .map(|ivec| from_be_u64(ivec.as_ref()))
+            .unwrap_or(last_idx.saturating_add(1));
+        s.next_index = next;
+        INTENTS_GAUGE.set(s.intents.len() as i64);
+        tracing::info!(restored = s.intents.len(), next_index = s.next_index, "loaded intents from persistence");
+    }
 
     // Start background scheduler if enabled
     #[cfg(feature = "scheduler")]
@@ -926,10 +1123,6 @@ async fn main() {
     #[cfg(feature = "mev")]
     let _ = &*AUCTION_CLEAR_TOTAL;
 
-    let port: u16 = std::env::var("FPN_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8080);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("listening on {}", addr);
     let listener = TcpListener::bind(addr).await.unwrap();
@@ -1025,16 +1218,20 @@ async fn abci_prepare_proposal(
         .span_context()
         .trace_id()
         .to_string();
-    let _ = state.tx.send(
-        json!({
-            "type":"abci_prepare_proposal",
-            "algorithm": resp.algorithm,
-            "fee_rate": resp.fee_rate,
-            "selected_count": resp.selected.len(),
-            "trace_id": trace_id
-        })
-        .to_string(),
-    );
+    let msg = json!({
+        "type":"abci_prepare_proposal",
+        "algorithm": resp.algorithm,
+        "fee_rate": resp.fee_rate,
+        "selected_count": resp.selected.len(),
+        "trace_id": trace_id
+    })
+    .to_string();
+    #[cfg(feature = "abci")]
+    {
+        let mut guard = state.last_abci_prepare.write().await;
+        *guard = Some(msg.clone());
+    }
+    let _ = state.tx.send(msg);
     Ok(Json(resp))
 }
 
@@ -1779,6 +1976,17 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt; // for `oneshot`
 
+    #[cfg(feature = "persist")]
+    fn mk_persist() -> Persistence {
+        let db = sled::Config::new()
+            .temporary(true)
+            .open()
+            .expect("open sled db");
+        let intents = db.open_tree("intents").expect("open intents tree");
+        let meta = db.open_tree("meta").expect("open meta tree");
+        Persistence { db, intents, meta }
+    }
+
     #[tokio::test]
     async fn health_ok() {
         let (tx, _rx) = broadcast::channel(10);
@@ -1786,6 +1994,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
         let res = app
@@ -1807,6 +2019,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+        #[cfg(feature = "abci")]
+        last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
         let res = app
@@ -1831,6 +2047,10 @@ mod tests {
             config: ServerConfig {
                 api_key: Some("testkey".to_string()),
             },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
         let body = serde_json::to_vec(&json!({
@@ -1864,6 +2084,10 @@ mod tests {
             config: ServerConfig {
                 api_key: Some("testkey".to_string()),
             },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+        #[cfg(feature = "abci")]
+        last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
         let body = serde_json::to_vec(&json!({
@@ -1894,6 +2118,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+        #[cfg(feature = "abci")]
+        last_abci_prepare: RwLock::new(None),
         });
         let mut rx = rx;
         let app = build_router(state.clone());
@@ -1934,6 +2162,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+        #[cfg(feature = "persist")]
+        persist: mk_persist(),
+        #[cfg(feature = "abci")]
+        last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
         let res = app
@@ -1956,6 +2188,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
         for fr in ["-0.1", "1.1"] {
@@ -1982,6 +2218,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
         let res = app
@@ -2010,6 +2250,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let mut rx = rx;
         let app = build_router(state);
@@ -2046,6 +2290,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let mut rx = rx;
         let app = build_router(state);
@@ -2097,6 +2345,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
         let res = app
@@ -2236,6 +2488,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
 
@@ -2309,6 +2565,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
 
@@ -2362,6 +2622,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state.clone());
 
@@ -2433,6 +2697,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
 
@@ -2475,6 +2743,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
 
@@ -2507,6 +2779,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let mut rx = rx;
         // Start scheduler in background
@@ -2537,6 +2813,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
 
@@ -2598,6 +2878,10 @@ mod tests {
             app: RwLock::new(AppState::default()),
             tx,
             config: ServerConfig { api_key: None },
+            #[cfg(feature = "persist")]
+            persist: mk_persist(),
+            #[cfg(feature = "abci")]
+            last_abci_prepare: RwLock::new(None),
         });
         let app = build_router(state);
 

@@ -53,3 +53,6 @@ node_modules/
 # Project docs/status not for git
 STATUS.md
 status.md
+
+# Sled DB/data (server)
+rust/server/data/

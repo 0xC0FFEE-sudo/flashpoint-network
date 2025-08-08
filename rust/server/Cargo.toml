@@ -24,6 +24,10 @@ reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"] }
 anyhow = "1"
 # Protobuf runtime for generated types (ABCI adapter scaffolding)
 prost = "0.12"
+# CLI for abci_shim binary
+clap = { version = "4", features = ["derive", "env"] }
+# Optional persistence store
+sled = { version = "0.34", optional = true }
 # Optional ZK backend (arkworks Groth16/BN254)
 ark-bn254 = { version = "0.4", optional = true }
 ark-groth16 = { version = "0.4", optional = true }
@@ -66,6 +70,8 @@ path = "src/bin/abci_shim.rs"
 
 [features]
 # Optional feature flags for advanced modules
+# Enable ABCI by default to ensure integration tests have the routes.
+default = ["abci"]
 abci = []
 mev = []
 scheduler = []
@@ -76,6 +82,7 @@ zk = [
     "ark-serialize",
     "ark-snark",
 ]
+persist = ["sled"]
 
 [build-dependencies]
 # Protobuf codegen
