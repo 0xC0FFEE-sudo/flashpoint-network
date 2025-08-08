@@ -44,6 +44,19 @@ make server-load-insert
 make server-load-build
 ```
 
+- ABCI shim:
+
+```
+# Build shim binary
+make abci-shim-build
+
+# Run shim (defaults: FPN_BASE=http://127.0.0.1:8080, FPN_ABCI_PORT=26658)
+FPN_BASE=http://127.0.0.1:8080 FPN_ABCI_PORT=26658 make abci-shim-run
+
+# Integration test (spawns server + shim and checks forwarding)
+make abci-shim-test
+```
+
 ### Feature flags (Rust server)
 
 Enable with `--features`, or all at once with `--all-features`.

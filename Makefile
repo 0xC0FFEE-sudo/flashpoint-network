@@ -80,6 +80,9 @@ server-help:
 	@echo "  make server-load-insert   # run async loader (insert mode); requires server running"
 	@echo "  make server-load-build    # run async loader (build mode); requires server running"
 	@echo "  make server-clean    # remove server target artifacts"
+	@echo "  make abci-shim-build # build ABCI shim binary"
+	@echo "  make abci-shim-run   # run ABCI shim (FPN_BASE, FPN_ABCI_PORT configurable)"
+	@echo "  make abci-shim-test  # run ABCI shim integration test"
 
 server-build:
 	$(CARGO) build --manifest-path $(SERVER_MANIFEST)
@@ -161,6 +164,17 @@ server-load-insert:
 
 server-load-build:
 	FPN_LOAD_MODE=build RUST_LOG=warn $(CARGO) run --manifest-path $(SERVER_MANIFEST) --release --example loader
+
+# --- ABCI shim ---
+.PHONY: abci-shim-build abci-shim-run abci-shim-test
+abci-shim-build:
+	$(CARGO) build --manifest-path $(SERVER_MANIFEST) --bin abci_shim
+
+abci-shim-run:
+	RUST_LOG=info $(CARGO) run --manifest-path $(SERVER_MANIFEST) --bin abci_shim
+
+abci-shim-test:
+	$(CARGO) test --manifest-path $(SERVER_MANIFEST) --all-features --test abci_shim_integration
 
 # --- Monitoring helpers ---
 ws-lag-demo:

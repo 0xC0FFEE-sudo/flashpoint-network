@@ -60,6 +60,10 @@ harness = false
 name = "auction_clear"
 harness = false
 
+[[bin]]
+name = "abci_shim"
+path = "src/bin/abci_shim.rs"
+
 [features]
 # Optional feature flags for advanced modules
 abci = []
