@@ -1,0 +1,31 @@
+# DEPRECATED: docker-compose is no longer used in this project. Kept for reference only.
+version: "3.9"
+
+services:
+  app:
+    build: .
+    container_name: flashpoint-app
+    environment:
+      - FPN_API_KEY=${FPN_API_KEY:-}
+    ports:
+      - "8001:8000"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: flashpoint-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: flashpoint-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus

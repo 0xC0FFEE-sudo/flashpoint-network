@@ -1,0 +1,72 @@
+[package]
+name = "fpn_server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7", features = ["ws", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tower-http = { version = "0.5", features = ["cors"] }
+prometheus = "0.13"
+once_cell = "1"
+opentelemetry = "0.24"
+tracing-opentelemetry = "0.25"
+opentelemetry_sdk = { version = "0.24", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.17", features = ["http-proto"] }
+tower = { version = "0.4", features = ["load-shed", "buffer", "limit"] }
+rand = "0.8"
+console-subscriber = "0.2"
+reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"] }
+anyhow = "1"
+# Optional ZK backend (arkworks Groth16/BN254)
+ark-bn254 = { version = "0.4", optional = true }
+ark-groth16 = { version = "0.4", optional = true }
+ark-relations = { version = "0.4", optional = true }
+ark-serialize = { version = "0.4", optional = true }
+ark-snark = { version = "0.4", optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+assert_cmd = "2"
+portpicker = "0.1"
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+tungstenite = "0.24"
+
+[[bench]]
+name = "intent_insert"
+harness = false
+
+[[bench]]
+name = "build_block"
+harness = false
+
+
+[[bench]]
+name = "intent_insert_param"
+harness = false
+
+[[bench]]
+name = "build_block_param"
+harness = false
+
+[[bench]]
+name = "auction_clear"
+harness = false
+
+[features]
+# Optional feature flags for advanced modules
+abci = []
+mev = []
+scheduler = []
+zk = [
+    "ark-bn254",
+    "ark-groth16",
+    "ark-relations",
+    "ark-serialize",
+    "ark-snark",
+]

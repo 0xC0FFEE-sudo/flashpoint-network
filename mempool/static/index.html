@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flashpoint Mock Mempool Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Flashpoint Mock Mempool</h1>
+    <nav>
+      <a href="/docs" target="_blank">Open API Docs</a>
+      <a href="/metrics/prometheus" target="_blank">Prometheus /metrics</a>
+    </nav>
+    <div class="row">
+      <label>API Key
+        <input id="api_key" type="password" placeholder="optional (X-API-Key)" />
+      </label>
+      <button id="btn-save-key">Save</button>
+      <span id="ws-status" class="pill">WS: disconnected</span>
+    </div>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Health & Control</h2>
+      <div class="row">
+        <button id="btn-health">Health</button>
+        <button id="btn-reset" class="danger">Reset</button>
+        <span id="health-out"></span>
+      </div>
+      <div class="row">
+        <label>Seed Count
+          <input id="seed-count" type="number" min="1" step="1" value="50" />
+        </label>
+        <button id="btn-seed">Seed</button>
+        <span id="seed-out"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Submit Intent</h2>
+      <div class="row">
+        <label>Profit <input id="profit" type="number" step="0.01" value="10" /></label>
+        <label>Resources (comma-separated)
+          <input id="resources" type="text" placeholder="pair:ETH/USDC, dex:uni-v3" value="pair:ETH/USDC" />
+        </label>
+        <label>Client ID <input id="client_id" type="text" placeholder="c1" /></label>
+        <button id="btn-submit">Submit</button>
+      </div>
+      <pre id="submit-out" class="mono small"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Bulk Submit</h2>
+      <p>Paste JSON array of intents, e.g.:
+      <code>[{"profit":12,"resources":["pair:ETH/USDC"]},{"profit":30,"resources":["dex:uni-v3","pair:ETH/USDC"]}]</code>
+      </p>
+      <textarea id="bulk-json" rows="6" placeholder='[{"profit":12,"resources":["pair:ETH/USDC"]}]'></textarea>
+      <div class="row">
+        <button id="btn-bulk">Submit Bulk</button>
+        <span id="bulk-out"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Intents</h2>
+      <div class="row">
+        <button id="btn-list">Refresh</button>
+        <span id="count-out"></span>
+      </div>
+      <table id="intents-table">
+        <thead>
+          <tr><th>#</th><th>Profit</th><th>Resources</th><th>Client</th><th>Arrival</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Compare Algorithms</h2>
+      <div class="row">
+        <button id="btn-compare">Compare FIFO vs Greedy</button>
+        <pre id="compare-out" class="mono"></pre>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Build Block</h2>
+      <div class="row">
+        <label>Algorithm
+          <select id="algo">
+            <option value="greedy" selected>greedy</option>
+            <option value="fifo">fifo</option>
+          </select>
+        </label>
+        <label>Fee Rate
+          <input id="fee_rate" type="number" min="0" max="1" step="0.01" value="0.12" />
+        </label>
+        <button id="btn-build">Build Block</button>
+      </div>
+      <pre id="block-summary" class="mono"></pre>
+      <table id="selected-table">
+        <thead>
+          <tr><th>Profit</th><th>Trader Profit</th><th>Fee Share</th><th>Resources</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Metrics</h2>
+      <div class="row">
+        <button id="btn-metrics">Refresh Metrics</button>
+      </div>
+      <pre id="metrics-out" class="mono"></pre>
+    </section>
+  </main>
+
+  <footer>
+    <small>Flashpoint Prototype — for demonstration and iteration only.</small>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

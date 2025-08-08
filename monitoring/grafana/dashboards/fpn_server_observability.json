@@ -1,0 +1,217 @@
+{
+  "uid": "fpn-obs-1",
+  "title": "Flashpoint Server Observability",
+  "tags": ["flashpoint", "rust", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 37,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "type": "datasource",
+        "name": "datasource",
+        "label": "Prometheus",
+        "query": "prometheus",
+        "current": {},
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "WS Clients",
+      "id": 1,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "fpn_ws_clients",
+          "legendFormat": "clients",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Intent Request Rate (rps)",
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(fpn_intents_total[5m]))",
+          "legendFormat": "intents rps",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Build Block Request Rate (rps)",
+      "id": 3,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(fpn_build_block_total[5m]))",
+          "legendFormat": "build_block rps",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Build Block Latency (p50/p95/p99)",
+      "id": 4,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(fpn_build_block_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(fpn_build_block_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(fpn_build_block_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Mempool Intents Gauge",
+      "id": 5,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "fpn_intents_in_mempool",
+          "legendFormat": "in_mempool",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "WS Channel Capacity",
+      "id": 6,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "expr": "fpn_ws_channel_capacity",
+          "legendFormat": "capacity",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto" }
+    },
+    {
+      "type": "timeseries",
+      "title": "WS Lagged Rate (1/s)",
+      "id": 7,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "rate(fpn_ws_lagged_total[5m])",
+          "legendFormat": "lagged rps",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rejects Rate (1/s)",
+      "id": 8,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "rate(fpn_rejects_total[5m])",
+          "legendFormat": "rejects rps",
+          "refId": "A"
+        }
+      ]
+    }
+    ,
+    {
+      "type": "timeseries",
+      "title": "Scheduler Batches Rate (1/s)",
+      "id": 9,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 26 },
+      "targets": [
+        { "expr": "rate(fpn_scheduler_batches_total[5m])", "legendFormat": "batches rps", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Scheduler Batch Latency (p50/p95/p99)",
+      "id": 10,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 26 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum(rate(fpn_scheduler_batch_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(fpn_scheduler_batch_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(fpn_scheduler_batch_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "MEV Auction Submissions (1/s)",
+      "id": 11,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 32 },
+      "targets": [
+        { "expr": "rate(fpn_auction_submissions_total[5m])", "legendFormat": "submissions rps", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "ZK Proof Requests (1/s)",
+      "id": 12,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 32 },
+      "targets": [
+        { "expr": "rate(fpn_zk_proofs_total[5m])", "legendFormat": "zk rps", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "ZK Proof Latency (p50/p95/p99)",
+      "id": 13,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 38 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum(rate(fpn_zk_proof_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(fpn_zk_proof_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(fpn_zk_proof_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "ZK Jobs Inflight",
+      "id": 14,
+      "datasource": { "type": "prometheus", "uid": "$datasource" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 44 },
+      "targets": [
+        { "expr": "fpn_zk_jobs_inflight", "legendFormat": "inflight", "refId": "A" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto" }
+    }
+  ]
+}

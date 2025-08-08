@@ -1,0 +1,4 @@
+[
+  {"profit": 10.0, "resources": ["pair:ETH/USDC"], "client_id": null, "arrival_index": 0},
+  {"profit": 20.0, "resources": ["dex:uniswap"], "client_id": null, "arrival_index": 1}
+]

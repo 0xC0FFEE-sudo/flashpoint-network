@@ -1,0 +1,26 @@
+{
+  "algorithm": "greedy",
+  "fee_rate": 0.1,
+  "baseline_fifo_profit": 30.0,
+  "total_profit": 30.0,
+  "surplus": 0.0,
+  "sequencer_fee": 0.0,
+  "selected": [
+    {
+      "profit": 10.0,
+      "resources": ["pair:ETH/USDC"],
+      "client_id": null,
+      "arrival_index": 0,
+      "fee_share": 0.0,
+      "trader_profit": 10.0
+    },
+    {
+      "profit": 20.0,
+      "resources": ["dex:uniswap"],
+      "client_id": null,
+      "arrival_index": 1,
+      "fee_share": 0.0,
+      "trader_profit": 20.0
+    }
+  ]
+}

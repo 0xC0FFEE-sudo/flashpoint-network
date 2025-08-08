@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.build/
+.dist/
+.pytest_cache/
+.mypy_cache/
+.coverage*
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+
+# Editors
+.vscode/
+.idea/
+
+# Rust (Cargo)
+target/
+**/target/
+# Criterion benchmarks
+**/criterion/
+# Flamegraph outputs
+flamegraph.svg
+perf.data*
+
+# Coverage & test artifacts
+coverage/
+coverage.xml
+lcov.info
+junit*.xml
+
+# Logs & temp
+*.log
+*.tmp
+*.swp
+.DS_Store
+
+# Env files
+.env
+.env.*
+
+# Node (if any)
+node_modules/
+
+# Project docs/status not for git
+STATUS.md
+status.md

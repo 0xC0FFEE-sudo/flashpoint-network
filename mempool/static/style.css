@@ -1,0 +1,23 @@
+* { box-sizing: border-box; }
+body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #0b1220; color: #e6eefc; }
+header, footer { padding: 16px 20px; background: #0f1830; border-bottom: 1px solid #1e2a4a; }
+header h1 { margin: 0; font-size: 20px; }
+header nav a { color: #7fb3ff; text-decoration: none; margin-left: 12px; }
+main { max-width: 1100px; margin: 16px auto; padding: 0 16px; }
+.card { background: #0f1830; border: 1px solid #1e2a4a; border-radius: 10px; padding: 16px; margin: 14px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.35); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+label { display: flex; flex-direction: column; font-size: 13px; color: #b9c8e0; }
+input, select, textarea { background: #0b1220; color: #e6eefc; border: 1px solid #2a3b6a; border-radius: 8px; padding: 8px 10px; outline: none; }
+button { background: linear-gradient(135deg, #1c68f3, #7c4df5); border: none; color: white; padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; transition: transform .05s ease; }
+button:active { transform: translateY(1px); }
+button.danger { background: linear-gradient(135deg, #d94141, #a22424); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.small { font-size: 12px; }
+pre { background: #0b1220; border: 1px solid #1e2a4a; padding: 10px; border-radius: 8px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #1e2a4a; padding: 8px; font-size: 14px; }
+th { text-align: left; color: #b9c8e0; }
+code { background: #0b1220; border: 1px solid #1e2a4a; padding: 2px 4px; border-radius: 6px; }
+footer { border-top: 1px solid #1e2a4a; border-bottom: none; text-align: center; color: #9fb1d4; }
+.pill { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #3b415a; color: #e6eefc; font-size: 12px; }
+.pill.ok { background: #1c7f4d; }
